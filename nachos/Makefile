@@ -39,7 +39,7 @@ CLASSFILES := $(foreach dir,$(DIRS),$(patsubst %,nachos/$(dir)/%.class,$($(dir))
 all: $(CLASSFILES)
 
 nachos/%.class: ../%.java
-	javac -classpath . -d . -sourcepath ../.. -g $<
+	javac -Xlint -classpath . -d . -sourcepath ../.. -g $<
 
 clean:
 	rm -f */*/*.class
