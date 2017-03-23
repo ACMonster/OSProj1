@@ -158,7 +158,13 @@ public class KThread {
     private void runThread() {
 	begin();
 	target.run();
+    wakeupJoin();
 	finish();
+    }
+
+    /* wake up the thread that calls join */
+    private void wakeupJoin() {
+        joinLock.V();
     }
 
     private void begin() {
@@ -190,7 +196,6 @@ public class KThread {
 
 	Lib.assertTrue(toBeDestroyed == null);
 	toBeDestroyed = currentThread;
-
 
 	currentThread.status = statusFinished;
 	
@@ -276,6 +281,13 @@ public class KThread {
 	Lib.debug(dbgThread, "Joining to thread: " + toString());
 
 	Lib.assertTrue(this != currentThread);
+
+    /* directly return if finished */
+    if(status == statusFinished)
+        return;
+
+    /* put current thread to sleep and wake it up upon finishing */
+    joinLock.P();
 
     }
 
@@ -400,9 +412,83 @@ public class KThread {
     /**
      * Tests whether this module is working.
      */
+
+    /* test whether join works, expected to have child before parent */
+    public static void joinTest() {
+        KThread t0 = new KThread(new Runnable() {
+            public void run() {
+                KThread t1 = new KThread(new Runnable() {
+                    public void run() {
+                        System.out.println("joinTest: Child thread.");
+                    }
+                });
+                t1.fork();
+                t1.join();
+                System.out.println("joinTest: Parent thread.");
+            }
+        });
+
+        t0.fork();
+        t0.join();
+    }
+
+    public static void conditionTest() {
+        KThread parent = new KThread(new Runnable() {
+            public void run() {
+                final int NUM_THREADS = 3;
+
+                Lock lock = new Lock();
+                Condition cond = new Condition(lock);
+
+                KThread th[] = new KThread[NUM_THREADS];
+
+                for(int i = 0; i < NUM_THREADS; i++) {
+                    th[i] = new KThread(new Runnable() {
+                        public void run() {
+                            lock.acquire();
+                            cond.sleep();
+                            System.out.println("conditionTest: " + KThread.currentThread().getName() + " wakes up!");
+                            lock.release();
+                        }
+                    });
+                    th[i].setName("Child thread " + i).fork();
+                }
+
+                System.out.println("conditionTest: Parent thread starting.");
+
+                yield();
+                lock.acquire();
+                cond.wake();
+                lock.release();
+                System.out.println("conditionTest: Parent thread working.");
+
+                yield();
+                lock.acquire();
+                cond.wakeAll();
+                lock.release();
+                System.out.println("conditionTest: Parent thread ending.");
+                for(int i = 0; i < NUM_THREADS; i++)
+                    th[i].join();
+            }
+        });
+
+        parent.fork();
+        parent.join();
+    }
+
+    public static void alarmTest() {
+        
+    }
+
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
-	
+
+    joinTest();
+
+    conditionTest();
+
+    alarmTest();
+
 	new KThread(new PingTest(1)).setName("forked thread").fork();
 	new PingTest(0).run();
     }
@@ -431,6 +517,7 @@ public class KThread {
     private String name = "(unnamed thread)";
     private Runnable target;
     private TCB tcb;
+    private Semaphore joinLock = new Semaphore(0);
 
     /**
      * Unique identifer for this thread. Used to deterministically compare
