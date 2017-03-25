@@ -96,4 +96,61 @@ public class Communicator {
 
 		return msg;
     }
+
+    /*
+     * testing Communicator class
+     */
+
+    private static class DelayedThread implements Runnable {
+
+    	private Communicator comm;
+    	private int msg;
+    	private int latency;
+
+    	DelayedThread(Communicator comm, int msg, int latency) {
+    		this.comm = comm;
+    		this.msg = msg;
+    		this.latency = latency;
+    	}
+
+    	public void run() {
+
+    		/* yield a certain number of times before working */
+    		for(int i = 0; i < latency; i++)
+    			KThread.yield();
+
+    		String name = KThread.currentThread().getName();
+
+    		if(msg != -1) {
+    			System.out.println(name + ": trying to speak " + msg);
+    			comm.speak(msg);
+    			System.out.println(name + ": finished speaking " + msg);
+    		} else {
+    			System.out.println(name + ": trying to listen");
+    			System.out.println(name + ": heard " + comm.listen());
+    		}
+
+    	}
+    }
+
+    public static void selfTest() {
+    	final Communicator comm = new Communicator();
+
+    	final int NUM = 10;
+
+    	KThread s[] = new KThread[NUM];
+    	KThread l[] = new KThread[NUM];
+
+    	for(int i = 0; i < NUM; i++) {
+    		s[i] = new KThread(new DelayedThread(comm, i, i * i)).setName("Speaker " + i);
+    		l[i] = new KThread(new DelayedThread(comm, -1, i * 3)).setName("Listener " + i);
+    		s[i].fork();
+    		l[i].fork();
+    	}
+
+    	for(int i = 0; i < NUM; i++) {
+    		s[i].join();
+    		l[i].join();
+    	}
+    }
 }
