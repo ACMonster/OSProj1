@@ -2,6 +2,8 @@ package nachos.threads;
 
 import nachos.machine.*;
 
+import java.util.LinkedList;
+
 /**
  * A <i>communicator</i> allows threads to synchronously exchange 32-bit
  * messages. Multiple threads can be waiting to <i>speak</i>,
@@ -10,10 +12,33 @@ import nachos.machine.*;
  * threads can be paired off at this point.
  */
 public class Communicator {
+
+	/*
+	 * Lock and condition variable.
+	 */
+    private Lock conditionLock;
+    private Condition cond;
+
+    /*
+     * Number of waiting listeners and speakers.
+     */
+    private int numListener = 0;
+    private int numSpeaker = 0;
+
+    /*
+     * The queue of pending words to send.
+     */
+
+    private LinkedList<Integer> valQueue;
+
     /**
      * Allocate a new communicator.
      */
+
     public Communicator() {
+    	conditionLock = new Lock();
+    	cond = new Condition(conditionLock);
+    	valQueue = new LinkedList<Integer>();
     }
 
     /**
@@ -27,6 +52,21 @@ public class Communicator {
      * @param	word	the integer to transfer.
      */
     public void speak(int word) {
+    	conditionLock.acquire();
+
+    	valQueue.add(new Integer(word));
+
+    	if(numListener > 0) {
+    		/* Listeners are waiting: wake up a listener */
+    		numListener--;
+    		cond.wake();
+    	} else {
+    		/* put myself into waiting queue */
+    		numSpeaker++;
+    		cond.sleep();
+    	}
+
+    	conditionLock.release();
     }
 
     /**
@@ -36,6 +76,24 @@ public class Communicator {
      * @return	the integer transferred.
      */    
     public int listen() {
-	return 0;
+    	conditionLock.acquire();
+
+    	int msg;
+
+    	if(numSpeaker > 0) {
+    		/* wake up a speaker */
+    		msg = valQueue.removeFirst();
+    		numSpeaker--;
+    		cond.wake();
+    	} else {
+    		/* wait for a speaker */
+    		numListener++;
+    		cond.sleep();
+    		msg = valQueue.removeFirst();
+    	}
+
+    	conditionLock.release();
+
+		return msg;
     }
 }

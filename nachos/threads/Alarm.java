@@ -2,6 +2,8 @@ package nachos.threads;
 
 import nachos.machine.*;
 
+import java.util.ArrayList;
+
 /**
  * Uses the hardware timer to provide preemption, and to allow threads to sleep
  * until a certain time.
@@ -14,7 +16,20 @@ public class Alarm {
      * <p><b>Note</b>: Nachos will not function correctly with more than one
      * alarm.
      */
+
+    class WakeSchedule {
+        public long time;
+        public KThread thread;
+        WakeSchedule(long time, KThread thread) {
+            this.time = time;
+            this.thread = thread;
+        }
+    }
+
+    static ArrayList<WakeSchedule> schedule;
+
     public Alarm() {
+    schedule = new ArrayList<WakeSchedule>();
 	Machine.timer().setInterruptHandler(new Runnable() {
 		public void run() { timerInterrupt(); }
 	    });
@@ -27,7 +42,15 @@ public class Alarm {
      * that should be run.
      */
     public void timerInterrupt() {
-	KThread.currentThread().yield();
+        ArrayList<WakeSchedule> newList = new ArrayList<WakeSchedule>();
+        for(WakeSchedule sch: schedule) {
+            if(Machine.timer().getTime() < sch.time)
+                newList.add(sch);
+            else
+                sch.thread.ready();
+        }
+        schedule = newList;
+    	KThread.currentThread().yield();
     }
 
     /**
@@ -45,9 +68,16 @@ public class Alarm {
      * @see	nachos.machine.Timer#getTime()
      */
     public void waitUntil(long x) {
-	// for now, cheat just to get something working (busy waiting is bad)
+
 	long wakeTime = Machine.timer().getTime() + x;
-	while (wakeTime > Machine.timer().getTime())
-	    KThread.yield();
+
+    schedule.add(new WakeSchedule(wakeTime, KThread.currentThread()));
+
+    boolean intStatus = Machine.interrupt().disable();
+
+    KThread.currentThread().sleep();
+
+    Machine.interrupt().restore(intStatus);
+
     }
 }

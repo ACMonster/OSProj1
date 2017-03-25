@@ -477,7 +477,16 @@ public class KThread {
     }
 
     public static void alarmTest() {
-        
+        KThread t = new KThread(new Runnable() {
+            public void run() {
+                System.out.println("Alarm starts.");
+                ThreadedKernel.alarm.waitUntil(10000000);
+                System.out.println("Alarm ends.");
+            }
+        });
+        t.fork();
+        System.out.println("Waiting...");
+        t.join();
     }
 
     public static void selfTest() {
