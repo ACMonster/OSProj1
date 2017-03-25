@@ -4,19 +4,27 @@ import nachos.ag.BoatGrader;
 public class Boat
 {
     static BoatGrader bg;
+    static Lock lock;
+    static int numOA, numOC, numMA, numMC;
+    static boolean needORower, needORider;
+    static Condition OChild, OAdult, MChild;
+    static Communicator communicator;
     
     public static void selfTest()
     {
 	BoatGrader b = new BoatGrader();
 	
-	System.out.println("\n ***Testing Boats with only 2 children***");
-	begin(0, 2, b);
+	// System.out.println("\n ***Testing Boats with only 2 children***");
+	// begin(0, 2, b);
 
-//	System.out.println("\n ***Testing Boats with 2 children, 1 adult***");
-//  	begin(1, 2, b);
+	// System.out.println("\n ***Testing Boats with 2 children, 1 adult***");
+ // 	begin(1, 2, b);
 
-//  	System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
-//  	begin(3, 3, b);
+ 	// System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
+ 	// begin(3, 3, b);
+
+ 		System.out.println("\n ***Testing Boats with 20 children, 20 adults***");
+ 		begin(20, 20, b);
     }
 
     public static void begin( int adults, int children, BoatGrader b )
@@ -25,20 +33,39 @@ public class Boat
 	// variable to be accessible by children.
 	bg = b;
 
-	// Instantiate global variables here
-	
-	// Create threads here. See section 3.4 of the Nachos for Java
-	// Walkthrough linked from the projects page.
-
-	Runnable r = new Runnable() {
-	    public void run() {
-                SampleItinerary();
-            }
+		// Instantiate global variables here
+		lock = new Lock();
+		numOA = numOC = numMA = numMC = 0;
+		needORower = needORider = true;
+		OChild = new Condition(lock);
+		OAdult = new Condition(lock);
+		MChild = new Condition(lock);
+		communicator = new Communicator();
+		// Create threads here. See section 3.4 of the Nachos for Java
+		// Walkthrough linked from the projects page.
+		Runnable adultRun = new Runnable() {
+		    public void run() {
+	                AdultItinerary();
+	            }
         };
-        KThread t = new KThread(r);
-        t.setName("Sample Boat Thread");
-        t.fork();
-
+        Runnable childRun = new Runnable() {
+        	public void run() {
+        		ChildItinerary();
+        	}
+        };
+        for (int i = 0; i < adults; ++ i)
+        {
+	        KThread t = new KThread(adultRun);
+	        t.setName("Adult thread " + i);
+	        t.fork();
+	    }
+	    for (int i = 0; i < children; ++ i)
+        {
+	        KThread t = new KThread(childRun);
+	        t.setName("Child thread " + i);
+	        t.fork();
+	    }
+	    while (communicator.listen() != adults + children);
     }
 
     static void AdultItinerary()
@@ -52,12 +79,88 @@ public class Boat
 	       bg.AdultRowToMolokai();
 	   indicates that an adult has rowed the boat across to Molokai
 	*/
+		lock.acquire();
+		numOA ++;
+		OAdult.sleep();
+		numOA --;
+		bg.AdultRowToMolokai();
+		numMA ++;
+		MChild.wake();
+		lock.release();
     }
 
     static void ChildItinerary()
     {
 	bg.initializeChild(); //Required for autograder interface. Must be the first thing called.
 	//DO NOT PUT ANYTHING ABOVE THIS LINE. 
+		int myPlace = 0; // 0 for Oahu, 1 for Molokai
+		while (true)
+		{
+			lock.acquire();
+			if (myPlace == 0)
+			{
+				while (!needORider || needORower && numOC == 0)
+				{
+					numOC ++;
+					OChild.sleep();
+					numOC --;
+				}
+				if (needORower)
+				{
+					needORower = false;
+					bg.ChildRowToMolokai();
+					OChild.wake();
+					myPlace = 1;
+					numMC ++;
+					MChild.sleep();
+					numMC --;
+				}
+				else
+				{
+					needORider = false;
+					bg.ChildRideToMolokai();
+					MChild.wake();
+					myPlace = 1;
+					numMC ++;
+					MChild.sleep();
+					numMC --;
+				}
+			}
+			else
+			{
+				int total = numMC + numMA + 1;
+				bg.ChildRowToOahu();
+				myPlace = 0;
+				if (numOC > 0)
+				{
+					needORider = true;
+					bg.ChildRowToMolokai();
+					OChild.wake();
+					myPlace = 1;
+					numMC ++;
+					MChild.sleep();
+					numMC --;
+				}
+				else if (numOA == 0)
+				{
+					bg.ChildRowToMolokai();
+					communicator.speak(total);
+					MChild.wake();
+					myPlace = 1;
+					numMC ++;
+					MChild.sleep();
+					numMC --;
+				}
+				else
+				{
+					OAdult.wake();
+					numOC ++;
+					OChild.sleep();
+					numOC --;
+				}
+			}
+			lock.release();
+		}
     }
 
     static void SampleItinerary()
