@@ -5,6 +5,7 @@ import nachos.machine.*;
 import java.util.TreeSet;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.ArrayList;
 
 /**
  * A scheduler that chooses threads based on their priorities.
@@ -126,8 +127,17 @@ public class PriorityScheduler extends Scheduler {
      * A <tt>ThreadQueue</tt> that sorts threads by priority.
      */
     protected class PriorityQueue extends ThreadQueue {
+
+    /* current holder of the resource */
+    private ThreadState holder;
+
+    /* threads waiting on the queue */
+    public ArrayList<ThreadState> threadWaitingQueue;
+
 	PriorityQueue(boolean transferPriority) {
 	    this.transferPriority = transferPriority;
+	    holder = null;
+	    threadWaitingQueue = new ArrayList<ThreadState>();
 	}
 
 	public void waitForAccess(KThread thread) {
@@ -142,7 +152,25 @@ public class PriorityScheduler extends Scheduler {
 
 	public KThread nextThread() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    // implement me
+	    if(transferPriority)
+	    	Lib.assertTrue(holder != null);
+
+	    /* remove edge (q, holder) for all q in queue, if transferPriority */
+	    if(holder != null && transferPriority) {
+			for(ThreadState q : threadWaitingQueue) {
+				q.delSucc(holder);
+				holder.delPred(q);
+			}
+			holder.invalidate();
+	    }
+		holder = null;	    	
+
+	    ThreadState nextThreadState = pickNextThread();
+	    if(nextThreadState != null) {
+	    	acquire(nextThreadState.thread);
+	    	threadWaitingQueue.remove(nextThreadState);
+		    return nextThreadState.thread;
+	    }
 	    return null;
 	}
 
@@ -154,13 +182,21 @@ public class PriorityScheduler extends Scheduler {
 	 *		return.
 	 */
 	protected ThreadState pickNextThread() {
-	    // implement me
-	    return null;
+	    int maxPriority = -1;
+	    ThreadState nextThreadState = null;
+	    for(ThreadState q : threadWaitingQueue) {
+	    	int thisPriority = q.getEffectivePriority();
+	    	if(thisPriority > maxPriority) {
+	    		maxPriority = thisPriority;
+	    		nextThreadState = q;
+	    	}
+	    }
+	    return nextThreadState;
 	}
 	
 	public void print() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    // implement me (if you want)
+	    // implement (if you want)
 	}
 
 	/**
@@ -178,6 +214,15 @@ public class PriorityScheduler extends Scheduler {
      * @see	nachos.threads.KThread#schedulingState
      */
     protected class ThreadState {
+
+    /* cached effective priority and its validity */
+    private boolean invalid;
+    private int cache;
+
+    /* edges in the waiting graph */
+    private ArrayList<ThreadState> pred;
+    private ArrayList<ThreadState> succ;
+
 	/**
 	 * Allocate a new <tt>ThreadState</tt> object and associate it with the
 	 * specified thread.
@@ -186,8 +231,29 @@ public class PriorityScheduler extends Scheduler {
 	 */
 	public ThreadState(KThread thread) {
 	    this.thread = thread;
-	    
+
+	    invalid = true;
+
+	    pred = new ArrayList<ThreadState>();
+	    succ = new ArrayList<ThreadState>();
+
 	    setPriority(priorityDefault);
+	}
+
+	void addSucc(ThreadState x) {
+		succ.add(x);
+	}
+
+	void addPred(ThreadState x) {
+		pred.add(x);
+	}
+
+	void delSucc(ThreadState x) {
+		succ.remove(x);
+	}
+
+	void delPred(ThreadState x) {
+		pred.remove(x);
 	}
 
 	/**
@@ -205,8 +271,15 @@ public class PriorityScheduler extends Scheduler {
 	 * @return	the effective priority of the associated thread.
 	 */
 	public int getEffectivePriority() {
-	    // implement me
-	    return priority;
+
+	    if(invalid) {
+	    	invalid = false;
+	    	cache = priority;
+	    	for(ThreadState ts : pred)
+	    		cache = Math.max(cache, ts.getEffectivePriority());
+	    }
+
+	    return cache;
 	}
 
 	/**
@@ -216,11 +289,23 @@ public class PriorityScheduler extends Scheduler {
 	 */
 	public void setPriority(int priority) {
 	    if (this.priority == priority)
-		return;
+			return;
 	    
 	    this.priority = priority;
 	    
-	    // implement me
+	    invalidate();
+	}
+
+	/*
+	 *	Invalidate this thread and its successors in the waiting graph
+	 */
+
+	public void invalidate() {
+		if(!invalid) {
+			invalid = true;
+			for(ThreadState ts : succ)
+				ts.invalidate();
+		}
 	}
 
 	/**
@@ -236,7 +321,19 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#waitForAccess
 	 */
 	public void waitForAccess(PriorityQueue waitQueue) {
-	    // implement me
+		if(waitQueue.transferPriority)
+	    	Lib.assertTrue(waitQueue.holder != null);
+
+	   	waitQueue.threadWaitingQueue.add(this);
+
+	    /* no need to add edge if no donation */
+	    if(!waitQueue.transferPriority)
+	    	return;
+
+	    this.addSucc(waitQueue.holder);
+	    waitQueue.holder.addPred(this);
+
+	    waitQueue.holder.invalidate();
 	}
 
 	/**
@@ -250,7 +347,19 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#nextThread
 	 */
 	public void acquire(PriorityQueue waitQueue) {
-	    // implement me
+	    Lib.assertTrue(waitQueue.holder == null);
+
+	    waitQueue.holder = this;
+
+	    /* no need to add edge if no donation */
+	    if(!waitQueue.transferPriority)
+	    	return;
+
+	    for(ThreadState q : waitQueue.threadWaitingQueue) {
+	    	q.addSucc(this);
+	    	this.addPred(q);
+	    	this.invalidate();
+	    }
 	}	
 
 	/** The thread with which this object is associated. */	   

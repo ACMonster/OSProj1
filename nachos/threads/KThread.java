@@ -417,16 +417,17 @@ public class KThread {
     public static void joinTest() {
         KThread t0 = new KThread(new Runnable() {
             public void run() {
+                System.out.println("joinTest: Parent thread.");
                 KThread t1 = new KThread(new Runnable() {
                     public void run() {
                         System.out.println("joinTest: Child thread.");
                     }
-                });
+                }).setName("Child");
                 t1.fork();
                 t1.join();
                 System.out.println("joinTest: Parent thread.");
             }
-        });
+        }).setName("Parent");
 
         t0.fork();
         t0.join();
@@ -438,7 +439,7 @@ public class KThread {
                 final int NUM_THREADS = 3;
 
                 Lock lock = new Lock();
-                Condition cond = new Condition(lock);
+                Condition2 cond = new Condition2(lock);
 
                 KThread th[] = new KThread[NUM_THREADS];
 
