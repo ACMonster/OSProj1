@@ -414,18 +414,30 @@ public class KThread {
      */
 
     /* test whether join works, expected to have child before parent */
+    
     public static void joinTest() {
         KThread t0 = new KThread(new Runnable() {
             public void run() {
-                System.out.println("joinTest: Parent thread.");
+                System.out.println("joinTest: Parent thread begins. (It will only yield 5 times)");
                 KThread t1 = new KThread(new Runnable() {
                     public void run() {
-                        System.out.println("joinTest: Child thread.");
+                        System.out.println("joinTest: Child thread begins. (It will yield 10 times)");
+                        for (int i = 0; i < 10; ++ i)
+                        {
+                            System.out.println("joinTest: Child thread looped " + i + " times");
+                            yield();
+                        }
+                        System.out.println("joinTest: Child thread ends.");
                     }
                 }).setName("Child");
                 t1.fork();
+                for (int i = 0; i < 5; ++ i)
+                {
+                    System.out.println("joinTest: Parent thread looped " + i + " times");
+                    yield();
+                }
                 t1.join();
-                System.out.println("joinTest: Parent thread.");
+                System.out.println("joinTest: Parent thread ends.");
             }
         }).setName("Parent");
 
@@ -438,8 +450,8 @@ public class KThread {
             public void run() {
                 final int NUM_THREADS = 3;
 
-                Lock lock = new Lock();
-                Condition2 cond = new Condition2(lock);
+                final Lock lock = new Lock();
+                final Condition2 cond = new Condition2(lock);
 
                 KThread th[] = new KThread[NUM_THREADS];
 
