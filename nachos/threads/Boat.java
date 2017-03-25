@@ -4,7 +4,7 @@ import nachos.ag.BoatGrader;
 public class Boat
 {
     static BoatGrader bg;
-    static Lock lock;
+    static Lock Olock, Mlock;
     static int numOA, numOC, numMA, numMC;
     static boolean needORower, needORider;
     static Condition OChild, OAdult, MChild;
@@ -14,17 +14,18 @@ public class Boat
     {
 	BoatGrader b = new BoatGrader();
 	
-	// System.out.println("\n ***Testing Boats with only 2 children***");
-	// begin(0, 2, b);
+	System.out.println("\n ***Testing Boats with only 2 children***");
+	begin(0, 2, b);
 
 	// System.out.println("\n ***Testing Boats with 2 children, 1 adult***");
  // 	begin(1, 2, b);
 
- 	// System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
- 	// begin(3, 3, b);
+ // 	System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
+ // 	begin(3, 3, b);
 
- 		System.out.println("\n ***Testing Boats with 20 children, 20 adults***");
- 		begin(20, 20, b);
+ 		// System.out.println("\n ***Testing Boats with 20 children, 20 adults***");
+ 		// begin(20, 20, b);
+
     }
 
     public static void begin( int adults, int children, BoatGrader b )
@@ -34,12 +35,13 @@ public class Boat
 	bg = b;
 
 		// Instantiate global variables here
-		lock = new Lock();
+		Olock = new Lock();
+		Mlock = new Lock();
 		numOA = numOC = numMA = numMC = 0;
 		needORower = needORider = true;
-		OChild = new Condition(lock);
-		OAdult = new Condition(lock);
-		MChild = new Condition(lock);
+		OChild = new Condition(Olock);
+		OAdult = new Condition(Olock);
+		MChild = new Condition(Mlock);
 		communicator = new Communicator();
 		// Create threads here. See section 3.4 of the Nachos for Java
 		// Walkthrough linked from the projects page.
@@ -79,24 +81,27 @@ public class Boat
 	       bg.AdultRowToMolokai();
 	   indicates that an adult has rowed the boat across to Molokai
 	*/
-		lock.acquire();
+		Olock.acquire();
 		numOA ++;
 		OAdult.sleep();
 		numOA --;
+		Olock.release();
 		bg.AdultRowToMolokai();
+		Mlock.acquire();
 		numMA ++;
 		MChild.wake();
-		lock.release();
+		Mlock.release();
     }
 
     static void ChildItinerary()
     {
 	bg.initializeChild(); //Required for autograder interface. Must be the first thing called.
 	//DO NOT PUT ANYTHING ABOVE THIS LINE. 
+
+		Olock.acquire();
 		int myPlace = 0; // 0 for Oahu, 1 for Molokai
 		while (true)
 		{
-			lock.acquire();
 			if (myPlace == 0)
 			{
 				while (!needORider || needORower && numOC == 0)
@@ -108,8 +113,12 @@ public class Boat
 				if (needORower)
 				{
 					needORower = false;
-					bg.ChildRowToMolokai();
 					OChild.wake();
+					Olock.release();
+
+					bg.ChildRowToMolokai();
+
+					Mlock.acquire();
 					myPlace = 1;
 					numMC ++;
 					MChild.sleep();
@@ -118,9 +127,13 @@ public class Boat
 				else
 				{
 					needORider = false;
+					Olock.release();
+
 					bg.ChildRideToMolokai();
-					MChild.wake();
+
+					Mlock.acquire();
 					myPlace = 1;
+					MChild.wake();
 					numMC ++;
 					MChild.sleep();
 					numMC --;
@@ -128,14 +141,21 @@ public class Boat
 			}
 			else
 			{
-				int total = numMC + numMA + 1;
+				Mlock.release();
+
 				bg.ChildRowToOahu();
+
+				Olock.acquire();
 				myPlace = 0;
 				if (numOC > 0)
 				{
 					needORider = true;
-					bg.ChildRowToMolokai();
 					OChild.wake();
+					Olock.release();
+
+					bg.ChildRowToMolokai();
+
+					Mlock.acquire();
 					myPlace = 1;
 					numMC ++;
 					MChild.sleep();
@@ -143,10 +163,14 @@ public class Boat
 				}
 				else if (numOA == 0)
 				{
+					Olock.release();
+
 					bg.ChildRowToMolokai();
-					communicator.speak(total);
-					MChild.wake();
+
+					Mlock.acquire();
 					myPlace = 1;
+					communicator.speak(numMC + numMA + 1);
+					MChild.wake();
 					numMC ++;
 					MChild.sleep();
 					numMC --;
@@ -159,7 +183,6 @@ public class Boat
 					numOC --;
 				}
 			}
-			lock.release();
 		}
     }
 
