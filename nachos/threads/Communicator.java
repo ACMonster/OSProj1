@@ -4,6 +4,8 @@ import nachos.machine.*;
 
 import java.util.LinkedList;
 
+import java.util.Random;
+
 /**
  * A <i>communicator</i> allows threads to synchronously exchange 32-bit
  * messages. Multiple threads can be waiting to <i>speak</i>,
@@ -136,14 +138,16 @@ public class Communicator {
     public static void selfTest() {
     	final Communicator comm = new Communicator();
 
-    	final int NUM = 10;
+    	final int NUM = 3;
+
+    	Random rand = new Random();
 
     	KThread s[] = new KThread[NUM];
     	KThread l[] = new KThread[NUM];
 
     	for(int i = 0; i < NUM; i++) {
-    		s[i] = new KThread(new DelayedThread(comm, i, i * i)).setName("Speaker " + i);
-    		l[i] = new KThread(new DelayedThread(comm, -1, i * 3)).setName("Listener " + i);
+    		s[i] = new KThread(new DelayedThread(comm, i, rand.nextInt(100))).setName("Speaker " + i);
+    		l[i] = new KThread(new DelayedThread(comm, -1, rand.nextInt(100))).setName("Listener " + i);
     		s[i].fork();
     		l[i].fork();
     	}

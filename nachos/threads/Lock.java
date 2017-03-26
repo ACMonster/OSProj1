@@ -26,6 +26,16 @@ public class Lock {
     public Lock() {
     }
 
+    /*
+     * Allocate a new lock initally holded by some KThread t.
+     */
+
+    public Lock(KThread t) {
+        this();
+        lockHolder = t;
+        waitQueue.acquire(t);
+    }
+
     /**
      * Atomically acquire this lock. The current thread must not already hold
      * this lock.

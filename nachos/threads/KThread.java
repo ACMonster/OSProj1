@@ -144,6 +144,9 @@ public class KThread {
 
 	boolean intStatus = Machine.interrupt().disable();
 
+    /* initialize joinLock to be held by myself */
+    joinLock = new Lock(this);
+
 	tcb.start(new Runnable() {
 		public void run() {
 		    runThread();
@@ -164,7 +167,7 @@ public class KThread {
 
     /* wake up the thread that calls join */
     private void wakeupJoin() {
-        joinLock.V();
+        joinLock.release();
     }
 
     private void begin() {
@@ -286,8 +289,8 @@ public class KThread {
     if(status == statusFinished)
         return;
 
-    /* put current thread to sleep and wake it up upon finishing */
-    joinLock.P();
+    /* try to acquire the lock on this thread */
+    joinLock.acquire();
 
     }
 
@@ -442,6 +445,7 @@ public class KThread {
         }).setName("Parent");
 
         t0.fork();
+        System.out.println("Testing...");
         t0.join();
     }
 
@@ -507,12 +511,12 @@ public class KThread {
 
     joinTest();
 
-    conditionTest();
+    /*conditionTest();
 
     alarmTest();
 
 	new KThread(new PingTest(1)).setName("forked thread").fork();
-	new PingTest(0).run();
+	new PingTest(0).run();*/
     }
 
     private static final char dbgThread = 't';
@@ -539,7 +543,7 @@ public class KThread {
     private String name = "(unnamed thread)";
     private Runnable target;
     private TCB tcb;
-    private Semaphore joinLock = new Semaphore(0);
+    private Lock joinLock = null;
 
     /**
      * Unique identifer for this thread. Used to deterministically compare
