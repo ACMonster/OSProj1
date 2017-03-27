@@ -51,6 +51,8 @@ public class ThreadedKernel extends Kernel {
         Condition2.selfTest();
         Alarm.selfTest();
         Communicator.selfTest();
+        if(scheduler instanceof PriorityScheduler)
+            PriorityScheduler.selfTest();
         Boat.selfTest();
 
     	Semaphore.selfTest();
