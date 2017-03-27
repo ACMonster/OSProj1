@@ -123,7 +123,7 @@ public class PriorityScheduler extends Scheduler {
 	return (ThreadState) thread.schedulingState;
     }
 
-	private static KThread lockThread(Lock lock, String name, int priority, int workLoad, boolean needLock) {
+	private static KThread lockThread(final Lock lock, final String name, int priority, final int workLoad, final boolean needLock) {
 		KThread t = new KThread(new Runnable() {
 			public void run() {
 				if (needLock) {

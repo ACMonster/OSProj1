@@ -86,8 +86,7 @@ public class Condition2 {
         class R implements Runnable {
             int NUM_THREADS;
 
-            public R(int threads)
-            {
+            public R(int threads) {
                 NUM_THREADS = threads;
             }
 

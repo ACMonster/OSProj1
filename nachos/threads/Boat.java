@@ -20,11 +20,11 @@ public class Boat
 	// System.out.println("\n ***Testing Boats with 2 children, 1 adult***");
  // 	begin(1, 2, b);
 
- 	// System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
- 	// begin(3, 3, b);
+ 	System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
+ 	begin(3, 3, b);
 
- 		System.out.println("\n ***Testing Boats with 20 children, 20 adults***");
- 		begin(20, 20, b);
+ 		// System.out.println("\n ***Testing Boats with 20 children, 20 adults***");
+ 		// begin(20, 20, b);
 
     }
 

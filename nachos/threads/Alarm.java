@@ -82,15 +82,39 @@ public class Alarm {
     }
 
     public static void selfTest() {
-        KThread t = new KThread(new Runnable() {
+
+        class R implements Runnable {
+            int time;
+
+            public R(int t) {
+                time = t;
+            }
+
             public void run() {
-                System.out.println("Alarm starts.");
-                ThreadedKernel.alarm.waitUntil(10000000);
-                System.out.println("Alarm ends.");
+                System.out.println("alarmTest: " + KThread.currentThread().getName() + " starts.");
+                ThreadedKernel.alarm.waitUntil(time);
+                System.out.println("alarmTest: " + KThread.currentThread().getName() + " ends.");
+            }
+        }
+
+        KThread t = new KThread(new R(10000000));
+        t.setName("long alarm").fork();
+        t.join();
+
+        t = new KThread(new Runnable() {
+            public void run() {
+                KThread th[] = new KThread[10];
+
+                for (int i = 0; i < 10; ++ i) {
+                    th[i] = new KThread(new R(10000000 - 1000 * i));
+                    th[i].setName("Alarm " + i).fork();
+                }
+                for(int i = 0; i < 10; i++)
+                    th[i].join();
             }
         });
+
         t.fork();
-        System.out.println("Alarm waiting...");
         t.join();
     }
 }
