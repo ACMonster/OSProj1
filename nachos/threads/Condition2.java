@@ -82,9 +82,16 @@ public class Condition2 {
     }
 
     public static void selfTest() {
-        KThread parent = new KThread(new Runnable() {
+
+        class R implements Runnable {
+            int NUM_THREADS;
+
+            public R(int threads)
+            {
+                NUM_THREADS = threads;
+            }
+
             public void run() {
-                final int NUM_THREADS = 2;
 
                 final Lock lock = new Lock();
                 final Condition2 cond = new Condition2(lock);
@@ -103,6 +110,7 @@ public class Condition2 {
                     th[i].setName("Child thread " + i).fork();
                 }
 
+                System.out.println("conditionTest: Test with " + NUM_THREADS + " Child threads.");
                 System.out.println("conditionTest: Parent thread starting.");
 
                 KThread.yield();
@@ -110,8 +118,8 @@ public class Condition2 {
                 cond.wake();
                 cond.wake();
                 cond.wake();
-                lock.release();
                 System.out.println("conditionTest: Parent thread working.");
+                lock.release();
 
                 KThread.yield();
                 lock.acquire();
@@ -121,7 +129,13 @@ public class Condition2 {
                 for(int i = 0; i < NUM_THREADS; i++)
                     th[i].join();
             }
-        });
+        }
+        KThread parent = new KThread(new R(2));
+
+        parent.fork();
+        parent.join();
+
+        parent = new KThread(new R(10));
 
         parent.fork();
         parent.join();

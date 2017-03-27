@@ -6,7 +6,7 @@ public class Boat
     static BoatGrader bg;
     static Lock Olock, Mlock;
     static int numOA, numOC, numMA, numMC;
-    static boolean needORower, needORider;
+    static boolean needORower, needORider, arrivedM;
     static Condition OChild, OAdult, MChild;
     static Communicator communicator;
     
@@ -14,17 +14,17 @@ public class Boat
     {
 	BoatGrader b = new BoatGrader();
 	
-	System.out.println("\n ***Testing Boats with only 2 children***");
-	begin(0, 2, b);
+	// System.out.println("\n ***Testing Boats with only 2 children***");
+	// begin(0, 2, b);
 
 	// System.out.println("\n ***Testing Boats with 2 children, 1 adult***");
  // 	begin(1, 2, b);
 
- // 	System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
- // 	begin(3, 3, b);
+ 	// System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
+ 	// begin(3, 3, b);
 
- 		// System.out.println("\n ***Testing Boats with 20 children, 20 adults***");
- 		// begin(20, 20, b);
+ 		System.out.println("\n ***Testing Boats with 20 children, 20 adults***");
+ 		begin(20, 20, b);
 
     }
 
@@ -39,6 +39,7 @@ public class Boat
 		Mlock = new Lock();
 		numOA = numOC = numMA = numMC = 0;
 		needORower = needORider = true;
+		arrivedM = false;
 		OChild = new Condition(Olock);
 		OAdult = new Condition(Olock);
 		MChild = new Condition(Mlock);
@@ -114,15 +115,9 @@ public class Boat
 				{
 					needORower = false;
 					OChild.wake();
-					Olock.release();
 
 					bg.ChildRowToMolokai();
-
-					Mlock.acquire();
-					myPlace = 1;
-					numMC ++;
-					MChild.sleep();
-					numMC --;
+					Olock.release();
 				}
 				else
 				{
@@ -130,17 +125,20 @@ public class Boat
 					Olock.release();
 
 					bg.ChildRideToMolokai();
-
-					Mlock.acquire();
-					myPlace = 1;
-					MChild.wake();
-					numMC ++;
-					MChild.sleep();
-					numMC --;
 				}
+				Mlock.acquire();
+				myPlace = 1;
+				if (arrivedM)
+					MChild.wake();
+				else
+					arrivedM = true;
+				numMC ++;
+				MChild.sleep();
+				numMC --;
 			}
 			else
 			{
+				arrivedM = false;
 				Mlock.release();
 
 				bg.ChildRowToOahu();
@@ -151,12 +149,16 @@ public class Boat
 				{
 					needORider = true;
 					OChild.wake();
-					Olock.release();
 
 					bg.ChildRowToMolokai();
+					Olock.release();
 
 					Mlock.acquire();
 					myPlace = 1;
+					if (arrivedM)
+						MChild.wake();
+					else
+						arrivedM = true;
 					numMC ++;
 					MChild.sleep();
 					numMC --;

@@ -444,18 +444,20 @@ public class KThread {
             }
         }).setName("Parent");
 
+        System.out.println("Testing join...");
         t0.fork();
-        System.out.println("Testing...");
         t0.join();
+        System.out.println("Finish testing join!");
     }
 
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
 
-    joinTest();
 
 	new KThread(new PingTest(1)).setName("forked thread").fork();
 	new PingTest(0).run();
+
+    joinTest();
     }
 
     private static final char dbgThread = 't';
