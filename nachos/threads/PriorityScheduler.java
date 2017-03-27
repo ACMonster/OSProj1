@@ -123,6 +123,66 @@ public class PriorityScheduler extends Scheduler {
 	return (ThreadState) thread.schedulingState;
     }
 
+	private static KThread lockThread(Lock lock, String name, int priority, int workLoad, boolean needLock) {
+		KThread t = new KThread(new Runnable() {
+			public void run() {
+				if (needLock) {
+					System.out.println(name + " tries to acquire lock...");
+					lock.acquire();
+					System.out.println(name + " acquires lock...");
+				}
+
+				System.out.println(name + " starts working...");
+				for (int i = 0; i < workLoad; i++)
+					KThread.yield();
+				System.out.println(name + " finishes working...");
+
+				if (needLock) {
+					lock.release();
+					System.out.println(name + " releases lock...");
+				}
+			}
+		}).setName(name);
+
+		boolean intStatus = Machine.interrupt().disable();
+		ThreadedKernel.scheduler.setPriority(t, priority);
+		Machine.interrupt().restore(intStatus);
+
+		return t;
+	}
+
+	private static final int NUM = 3;
+	private static final int lowPriority = priorityDefault;
+	private static final int mediumPriority = 4;
+	private static final int highPriority = 6;
+
+	public static void selfTest() {
+		Lock lock = new Lock();
+		KThread low[] = new KThread[NUM];
+		KThread medium[] = new KThread[NUM];
+		KThread high[] = new KThread[NUM];
+		for(int i = 0; i < NUM; i++) {
+			low[i] = lockThread(lock, "Low " + i, lowPriority, 10000, true);
+			medium[i] = lockThread(lock, "Medium " + i, mediumPriority, 100, false);
+			high[i] = lockThread(lock, "High " + i, highPriority, 10000, true);
+		}
+		for(int i = 0; i < NUM; i++)
+			low[i].fork();
+		for(int i = 0; i < 100; i++)
+			KThread.yield();
+		for(int i = 0; i < NUM; i++)
+			medium[i].fork();
+		for(int i = 0; i < 1000; i++)
+			KThread.yield();
+		for(int i = 0; i < NUM; i++)
+			high[i].fork();
+		for(int i = 0; i < NUM; i++) {
+			low[i].join();
+			medium[i].join();
+			high[i].join();
+		}
+	}
+
     /**
      * A <tt>ThreadQueue</tt> that sorts threads by priority.
      */
