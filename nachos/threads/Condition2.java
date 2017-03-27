@@ -81,6 +81,52 @@ public class Condition2 {
 
     }
 
+    public static void selfTest() {
+        KThread parent = new KThread(new Runnable() {
+            public void run() {
+                final int NUM_THREADS = 2;
+
+                final Lock lock = new Lock();
+                final Condition2 cond = new Condition2(lock);
+
+                KThread th[] = new KThread[NUM_THREADS];
+
+                for(int i = 0; i < NUM_THREADS; i++) {
+                    th[i] = new KThread(new Runnable() {
+                        public void run() {
+                            lock.acquire();
+                            cond.sleep();
+                            System.out.println("conditionTest: " + KThread.currentThread().getName() + " wakes up!");
+                            lock.release();
+                        }
+                    });
+                    th[i].setName("Child thread " + i).fork();
+                }
+
+                System.out.println("conditionTest: Parent thread starting.");
+
+                KThread.yield();
+                lock.acquire();
+                cond.wake();
+                cond.wake();
+                cond.wake();
+                lock.release();
+                System.out.println("conditionTest: Parent thread working.");
+
+                KThread.yield();
+                lock.acquire();
+                cond.wakeAll();
+                lock.release();
+                System.out.println("conditionTest: Parent thread ending.");
+                for(int i = 0; i < NUM_THREADS; i++)
+                    th[i].join();
+            }
+        });
+
+        parent.fork();
+        parent.join();
+    }
+
     private Lock conditionLock;
     private LinkedList<KThread> waitQueue;
 }

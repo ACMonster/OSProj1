@@ -80,4 +80,17 @@ public class Alarm {
     Machine.interrupt().restore(intStatus);
 
     }
+
+    public static void selfTest() {
+        KThread t = new KThread(new Runnable() {
+            public void run() {
+                System.out.println("Alarm starts.");
+                ThreadedKernel.alarm.waitUntil(10000000);
+                System.out.println("Alarm ends.");
+            }
+        });
+        t.fork();
+        System.out.println("Alarm waiting...");
+        t.join();
+    }
 }

@@ -449,74 +449,13 @@ public class KThread {
         t0.join();
     }
 
-    public static void conditionTest() {
-        KThread parent = new KThread(new Runnable() {
-            public void run() {
-                final int NUM_THREADS = 3;
-
-                final Lock lock = new Lock();
-                final Condition2 cond = new Condition2(lock);
-
-                KThread th[] = new KThread[NUM_THREADS];
-
-                for(int i = 0; i < NUM_THREADS; i++) {
-                    th[i] = new KThread(new Runnable() {
-                        public void run() {
-                            lock.acquire();
-                            cond.sleep();
-                            System.out.println("conditionTest: " + KThread.currentThread().getName() + " wakes up!");
-                            lock.release();
-                        }
-                    });
-                    th[i].setName("Child thread " + i).fork();
-                }
-
-                System.out.println("conditionTest: Parent thread starting.");
-
-                yield();
-                lock.acquire();
-                cond.wake();
-                lock.release();
-                System.out.println("conditionTest: Parent thread working.");
-
-                yield();
-                lock.acquire();
-                cond.wakeAll();
-                lock.release();
-                System.out.println("conditionTest: Parent thread ending.");
-                for(int i = 0; i < NUM_THREADS; i++)
-                    th[i].join();
-            }
-        });
-
-        parent.fork();
-        parent.join();
-    }
-
-    public static void alarmTest() {
-        KThread t = new KThread(new Runnable() {
-            public void run() {
-                System.out.println("Alarm starts.");
-                ThreadedKernel.alarm.waitUntil(10000000);
-                System.out.println("Alarm ends.");
-            }
-        });
-        t.fork();
-        System.out.println("Waiting...");
-        t.join();
-    }
-
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
 
     joinTest();
 
-    /*conditionTest();
-
-    alarmTest();
-
 	new KThread(new PingTest(1)).setName("forked thread").fork();
-	new PingTest(0).run();*/
+	new PingTest(0).run();
     }
 
     private static final char dbgThread = 't';
