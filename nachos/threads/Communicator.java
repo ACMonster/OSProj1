@@ -1,160 +1,163 @@
+//yhdxt`oi`offt`of{inofinofmhphofx`ofxholhofuh`ov`ofphorih
+//PART OF THE NACHOS. DON'T CHANGE CODE OF THIS LINE
 package nachos.threads;
 
 import nachos.machine.*;
 
-import java.util.LinkedList;
-
-import java.util.Random;
-
 /**
  * A <i>communicator</i> allows threads to synchronously exchange 32-bit
- * messages. Multiple threads can be waiting to <i>speak</i>,
- * and multiple threads can be waiting to <i>listen</i>. But there should never
- * be a time when both a speaker and a listener are waiting, because the two
- * threads can be paired off at this point.
+ * messages. Multiple threads can be waiting to <i>speak</i>, and multiple
+ * threads can be waiting to <i>listen</i>. But there should never be a time
+ * when both a speaker and a listener are waiting, because the two threads can
+ * be paired off at this point.
  */
 public class Communicator {
-
-	/*
-	 * Lock and condition variable.
+	/**
+	 * Allocate a new communicator.
 	 */
-    private Lock conditionLock;
-    private Condition cond;
+	public Communicator() {
+		lock = new Lock();
 
-    /*
-     * Number of waiting listeners and speakers.
-     */
-    private int numListener = 0;
-    private int numSpeaker = 0;
+		speakerCondition = new Condition2(lock);
+		listenerCondition = new Condition2(lock);
+		returnCondition = new Condition2(lock);
 
-    /*
-     * The queue of pending words to send.
-     */
+		AS = WS = AL = WL = 0;
+	}
 
-    private LinkedList<Integer> valQueue;
+	/**
+	 * Wait for a thread to listen through this communicator, and then transfer
+	 * <i>word</i> to the listener.
+	 * 
+	 * <p>
+	 * Does not return until this thread is paired up with a listening thread.
+	 * Exactly one listener should receive <i>word</i>.
+	 * 
+	 * @param word
+	 *            the integer to transfer.
+	 */
+	public void speak(int word) {
+		lock.acquire();
+		while (AS != 0) {
+			WS++;
+			speakerCondition.sleep();
+			WS--;
+		}
 
-    /**
-     * Allocate a new communicator.
-     */
+		AS++;
 
-    public Communicator() {
-    	conditionLock = new Lock();
-    	cond = new Condition(conditionLock);
-    	valQueue = new LinkedList<Integer>();
-    }
+		this.word = word;
 
-    /**
-     * Wait for a thread to listen through this communicator, and then transfer
-     * <i>word</i> to the listener.
-     *
-     * <p>
-     * Does not return until this thread is paired up with a listening thread.
-     * Exactly one listener should receive <i>word</i>.
-     *
-     * @param	word	the integer to transfer.
-     */
-    public void speak(int word) {
-    	conditionLock.acquire();
+		if (AL != 0)
+			returnCondition.wake();
+		else {
+			if (WL != 0)
+				listenerCondition.wake();
+			returnCondition.sleep();
 
-    	valQueue.add(new Integer(word));
+			AS--;
+			AL--;
 
-    	if(numListener > 0) {
-    		/* Listeners are waiting: wake up a listener */
-    		numListener--;
-    		cond.wake();
-    	} else {
-    		/* put myself into waiting queue */
-    		numSpeaker++;
-    		cond.sleep();
-    	}
+			if (WS != 0)
+				speakerCondition.wake();
+		}
 
-    	conditionLock.release();
-    }
+		lock.release();
+	}
 
-    /**
-     * Wait for a thread to speak through this communicator, and then return
-     * the <i>word</i> that thread passed to <tt>speak()</tt>.
-     *
-     * @return	the integer transferred.
-     */    
-    public int listen() {
-    	conditionLock.acquire();
+	/**
+	 * Wait for a thread to speak through this communicator, and then return the
+	 * <i>word</i> that thread passed to <tt>speak()</tt>.
+	 * 
+	 * @return the integer transferred.
+	 */
+	public int listen() {
+		lock.acquire();
 
-    	int msg;
+		while (AL != 0) {
+			WL++;
+			listenerCondition.sleep();
+			WL--;
+		}
 
-    	if(numSpeaker > 0) {
-    		/* wake up a speaker */
-    		msg = valQueue.removeFirst();
-    		numSpeaker--;
-    		cond.wake();
-    	} else {
-    		/* wait for a speaker */
-    		numListener++;
-    		cond.sleep();
-    		msg = valQueue.removeFirst();
-    	}
+		AL++;
 
-    	conditionLock.release();
+		if (AS != 0)
+			returnCondition.wake();
+		else {
+			if (WS != 0)
+				speakerCondition.wake();
+			returnCondition.sleep();
 
-		return msg;
-    }
+			AL--;
+			AS--;
 
-    /*
-     * testing Communicator class
-     */
+			if (WL != 0)
+				listenerCondition.wake();
+		}
+		int word = this.word;
 
-    private static class DelayedThread implements Runnable {
+		lock.release();
 
-    	private Communicator comm;
-    	private int msg;
-    	private int latency;
+		return word;
+	}
 
-    	DelayedThread(Communicator comm, int msg, int latency) {
-    		this.comm = comm;
-    		this.msg = msg;
-    		this.latency = latency;
-    	}
-
-    	public void run() {
-
-    		/* yield a certain number of times before working */
-    		for(int i = 0; i < latency; i++)
-    			KThread.yield();
-
-    		String name = KThread.currentThread().getName();
-
-    		if(msg != -1) {
-    			System.out.println(name + ": trying to speak " + msg);
-    			comm.speak(msg);
-    			System.out.println(name + ": finished speaking " + msg);
-    		} else {
-    			System.out.println(name + ": trying to listen");
-    			System.out.println(name + ": heard " + comm.listen());
-    		}
-
-    	}
-    }
-
-    public static void selfTest() {
-    	final Communicator comm = new Communicator();
-
-    	final int NUM = 3;
-
-    	Random rand = new Random();
-
-    	KThread s[] = new KThread[NUM];
-    	KThread l[] = new KThread[NUM];
-
-    	for(int i = 0; i < NUM; i++) {
-    		s[i] = new KThread(new DelayedThread(comm, i, rand.nextInt(100))).setName("Speaker " + i);
-    		l[i] = new KThread(new DelayedThread(comm, -1, rand.nextInt(100))).setName("Listener " + i);
-    		s[i].fork();
-    		l[i].fork();
-    	}
-
-    	for(int i = 0; i < NUM; i++) {
-    		s[i].join();
-    		l[i].join();
-    	}
-    }
+	private static class Speaker implements Runnable {
+		Communicator com;
+		int index;
+		int message;
+		Speaker(int _index, Communicator _com, int _message) {
+			index = _index;
+			com = _com;
+			message = _message;
+		}
+		public void run() {
+			System.out.println("Speaker " + index + " starts speaking");
+			com.speak(message);
+			System.out.println("Speaker " + index + " speaks "+ message);
+			System.out.println("Speaker " + index + " ends speaking");
+		}
+	}
+	private static class Listener implements Runnable {
+		int index;
+		Communicator com;
+		Listener(int _index, Communicator _com) {
+			index = _index;
+			com = _com;
+		}
+		public void run() {
+			System.out.println("Listener " + index + " starts listening");
+			int temp = com.listen();
+			System.out.println("Listener " + index + " hears " + temp + " from speaker "+ temp);
+			System.out.println("Listener " + index + " ends listening");
+		}
+	}
+	/**
+	 * Tools for test Communicator
+	 */
+	public static void selfTest() {
+		Communicator com = new Communicator();
+		/* case 1 
+		(new KThread(new Listener(1, com))).fork();
+		(new KThread(new Listener(2, com))).fork();
+		(new KThread(new Speaker(1, com, 1))).fork();
+		(new KThread(new Speaker(2, com, 2))).fork();
+		(new KThread(new Speaker(3, com, 3))).fork();
+		(new KThread(new Listener(3, com))).fork();
+		*/
+		///* case 2
+		for(int i = 1; i < 6; i++){
+			(new KThread(new Listener(i, com))).fork();
+		}
+		for(int i = 5; i > 0; i--){
+			(new KThread(new Speaker(i, com, i))).fork();	
+		}
+		//*/
+		ThreadedKernel.alarm.waitUntil(100000);
+	}
+	
+	Lock lock;
+	Condition2 speakerCondition, listenerCondition, returnCondition;
+	int AS, WS, AL, WL;
+	int word;
 }

@@ -1,3 +1,5 @@
+//yhdxt`oi`offt`of{inofinofmhphofx`ofxholhofuh`ov`ofphorih
+//PART OF THE NACHOS. DON'T CHANGE CODE OF THIS LINE
 package nachos.threads;
 
 import nachos.machine.*;
@@ -24,16 +26,6 @@ public class Lock {
      * Allocate a new lock. The lock will initially be <i>free</i>.
      */
     public Lock() {
-    }
-
-    /*
-     * Allocate a new lock initally holded by some KThread t.
-     */
-
-    public Lock(KThread t) {
-        this();
-        lockHolder = t;
-        waitQueue.acquire(t);
     }
 
     /**
@@ -70,7 +62,7 @@ public class Lock {
 
 	if ((lockHolder = waitQueue.nextThread()) != null)
 	    lockHolder.ready();
-	
+
 	Machine.interrupt().restore(intStatus);
     }
 

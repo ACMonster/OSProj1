@@ -1,120 +1,131 @@
+//yhdxt`oi`offt`of{inofinofmhphofx`ofxholhofuh`ov`ofphorih
+//PART OF THE NACHOS. DON'T CHANGE CODE OF THIS LINE
 package nachos.threads;
 
 import nachos.machine.*;
-
-import java.util.ArrayList;
 
 /**
  * Uses the hardware timer to provide preemption, and to allow threads to sleep
  * until a certain time.
  */
 public class Alarm {
-    /**
-     * Allocate a new Alarm. Set the machine's timer interrupt handler to this
-     * alarm's callback.
-     *
-     * <p><b>Note</b>: Nachos will not function correctly with more than one
-     * alarm.
-     */
+	/**
+	 * Allocate a new Alarm. Set the machine's timer interrupt handler to this
+	 * alarm's callback.
+	 * 
+	 * <p>
+	 * <b>Note</b>: Nachos will not function correctly with more than one alarm.
+	 */
+	public Alarm() {
+		Machine.timer().setInterruptHandler(new Runnable() {
+			public void run() {
+				timerInterrupt();
+			}
+		});
+	}
 
-    class WakeSchedule {
-        public long time;
-        public KThread thread;
-        WakeSchedule(long time, KThread thread) {
-            this.time = time;
-            this.thread = thread;
-        }
-    }
+	/**
+	 * The timer interrupt handler. This is called by the machine's timer
+	 * periodically (approximately every 500 clock ticks). Causes the current
+	 * thread to yield, forcing a context switch if there is another thread that
+	 * should be run.
+	 */
+	public void timerInterrupt() {
+		boolean intStatue = Machine.interrupt().disable();
 
-    static ArrayList<WakeSchedule> schedule;
+		WaitThread nextThread;
 
-    public Alarm() {
-    schedule = new ArrayList<WakeSchedule>();
-	Machine.timer().setInterruptHandler(new Runnable() {
-		public void run() { timerInterrupt(); }
-	    });
-    }
+		while ((nextThread = waitQueue.peek()) != null
+				&& nextThread.wakeTime() <= Machine.timer().getTime()) {
+			waitQueue.poll().thread().ready();
+		}
 
-    /**
-     * The timer interrupt handler. This is called by the machine's timer
-     * periodically (approximately every 500 clock ticks). Causes the current
-     * thread to yield, forcing a context switch if there is another thread
-     * that should be run.
-     */
-    public void timerInterrupt() {
-        ArrayList<WakeSchedule> newList = new ArrayList<WakeSchedule>();
-        for(WakeSchedule sch: schedule) {
-            if(Machine.timer().getTime() < sch.time)
-                newList.add(sch);
-            else
-                sch.thread.ready();
-        }
-        schedule = newList;
-    	KThread.currentThread().yield();
-    }
+		Machine.interrupt().restore(intStatue);
 
-    /**
-     * Put the current thread to sleep for at least <i>x</i> ticks,
-     * waking it up in the timer interrupt handler. The thread must be
-     * woken up (placed in the scheduler ready set) during the first timer
-     * interrupt where
-     *
-     * <p><blockquote>
-     * (current time) >= (WaitUntil called time)+(x)
-     * </blockquote>
-     *
-     * @param	x	the minimum number of clock ticks to wait.
-     *
-     * @see	nachos.machine.Timer#getTime()
-     */
-    public void waitUntil(long x) {
+		KThread.currentThread().yield();
+	}
 
-	long wakeTime = Machine.timer().getTime() + x;
+	/**
+	 * Put the current thread to sleep for at least <i>x</i> ticks, waking it up
+	 * in the timer interrupt handler. The thread must be woken up (placed in
+	 * the scheduler ready set) during the first timer interrupt where
+	 * 
+	 * <p>
+	 * <blockquote> (current time) >= (WaitUntil called time)+(x) </blockquote>
+	 * 
+	 * @param x
+	 *            the minimum number of clock ticks to wait.
+	 * 
+	 * @see nachos.machine.Timer#getTime()
+	 */
+	public void waitUntil(long x) {
+		long wakeTime = Machine.timer().getTime() + x;
 
-    schedule.add(new WakeSchedule(wakeTime, KThread.currentThread()));
+		boolean intStatue = Machine.interrupt().disable();
 
-    boolean intStatus = Machine.interrupt().disable();
+		waitQueue.add(new WaitThread(wakeTime, KThread.currentThread()));
 
-    KThread.currentThread().sleep();
+		KThread.sleep();
 
-    Machine.interrupt().restore(intStatus);
+		Machine.interrupt().restore(intStatue);
+	}
 
-    }
+	private class WaitThread implements Comparable<WaitThread> {
+		WaitThread(long wakeTime, KThread thread) {
+			Lib.assertTrue(Machine.interrupt().disabled());
 
-    public static void selfTest() {
+			this.wakeTime = wakeTime;
 
-        class R implements Runnable {
-            int time;
+			this.thread = thread;
+		}
 
-            public R(int t) {
-                time = t;
-            }
+		public int compareTo(WaitThread waitThread) {
+			if (wakeTime < waitThread.wakeTime)
+				return -1;
+			else if (wakeTime > waitThread.wakeTime)
+				return 1;
+			else
+				return thread.compareTo(waitThread.thread);
+		}
 
-            public void run() {
-                System.out.println("alarmTest: " + KThread.currentThread().getName() + " starts.");
-                ThreadedKernel.alarm.waitUntil(time);
-                System.out.println("alarmTest: " + KThread.currentThread().getName() + " ends.");
-            }
-        }
+		public long wakeTime() {
+			return wakeTime;
+		}
 
-        KThread t = new KThread(new R(10000000));
-        t.setName("long alarm").fork();
-        t.join();
+		public KThread thread() {
+			return thread;
+		}
 
-        t = new KThread(new Runnable() {
-            public void run() {
-                KThread th[] = new KThread[10];
-
-                for (int i = 0; i < 10; ++ i) {
-                    th[i] = new KThread(new R(10000000 - 1000 * i));
-                    th[i].setName("Alarm " + i).fork();
-                }
-                for(int i = 0; i < 10; i++)
-                    th[i].join();
-            }
-        });
-
-        t.fork();
-        t.join();
-    }
+		long wakeTime;
+		KThread thread;
+	}
+	
+	/**
+	 * Tools for test Alarm
+	 */
+	private static class AlarmTest implements Runnable {
+		private long delay;
+		AlarmTest(long _delay) {
+			delay = _delay;
+		}
+		
+		public void run() {
+			long now = Machine.timer().getTime();
+			System.out.println("Thread starts at " + now);
+			System.out.println("Thread calls waitUtill with delay " + delay);
+			ThreadedKernel.alarm.waitUntil(delay);
+			long newnow = Machine.timer().getTime();
+			System.out.println("Thread recovers at " + newnow + " (" + newnow + ">=" + now + "+" + delay + ")");
+		}
+	}
+	public static void selfTest(){
+		KThread[] t = new KThread[10];
+		for(int i = 0; i < 10; i++){
+			t[i] = new KThread(new AlarmTest((long)((i+1) * 100)));
+			t[i].fork();
+		}
+		ThreadedKernel.alarm.waitUntil(100000);
+	}
+	
+	java.util.PriorityQueue<WaitThread> waitQueue = new java.util.PriorityQueue<WaitThread>();
 }
