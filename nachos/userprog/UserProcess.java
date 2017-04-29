@@ -25,8 +25,7 @@ public class UserProcess {
     public UserProcess() {
 	int numPhysPages = Machine.processor().getNumPhysPages();
 	pageTable = new TranslationEntry[numPhysPages];
-	for (int i=0; i<numPhysPages; i++)
-	    pageTable[i] = new TranslationEntry(i,i, true,false,false,false);
+
     openFiles[0] = UserKernel.console.openForReading();
     openFiles[1] = UserKernel.console.openForWriting();
     }
@@ -284,27 +283,57 @@ public class UserProcess {
      * @return	<tt>true</tt> if the sections were successfully loaded.
      */
     protected boolean loadSections() {
-	if (numPages > Machine.processor().getNumPhysPages()) {
+        System.out.println("Num Pages: " + numPages);
+        boolean intStatus = Machine.interrupt().disable();
+	if (numPages > UserKernel.freePages.size()) {
 	    coff.close();
 	    Lib.debug(dbgProcess, "\tinsufficient physical memory");
+        Machine.interrupt().restore(intStatus);
 	    return false;
 	}
 
+    for (int s=0; s<coff.getNumSections(); s++) {
+        CoffSection section = coff.getSection(s);
+        int minvpn = section.getFirstVPN();
+        int maxvpn = minvpn + section.getLength();
+        if (minvpn < 0 || maxvpn > Machine.processor().getNumPhysPages()) {
+            Machine.interrupt().restore(intStatus);
+            return false;
+        }
+    }
+
+    System.out.println("Num Pages: " + numPages);
+
 	// load sections
-	for (int s=0; s<coff.getNumSections(); s++) {
+	for (int s = 0; s < coff.getNumSections(); s++) {
 	    CoffSection section = coff.getSection(s);
+        boolean readOnly = section.isReadOnly();
+
+        System.out.println("Total = " + coff.getNumSections());
+
+        System.out.println("Length = " + section.getLength());
 	    
 	    Lib.debug(dbgProcess, "\tinitializing " + section.getName()
 		      + " section (" + section.getLength() + " pages)");
 
-	    for (int i=0; i<section.getLength(); i++) {
-		int vpn = section.getFirstVPN()+i;
+	    for (int i = 0; i < section.getLength(); i++) {
+    		int vpn = section.getFirstVPN() + i;
+            int ppn = UserKernel.freePages.removeFirst();
 
-		// for now, just assume virtual addresses=physical addresses
-		section.loadPage(i, vpn);
+            System.out.println(ppn);
+
+            pageTable[vpn] = new TranslationEntry(vpn, ppn, true, readOnly, false, false);
+
+    		section.loadPage(i, ppn);
 	    }
 	}
-	
+
+    for (int i = numPages - stackPages - 1; i < numPages; i++) {
+        int ppn = UserKernel.freePages.removeFirst();
+        pageTable[i] = new TranslationEntry(i, ppn, true, false, false, false);
+    }
+    
+    Machine.interrupt().restore(intStatus);
 	return true;
     }
 
@@ -461,6 +490,7 @@ public class UserProcess {
      * @return	the value to be returned to the user.
      */
     public int handleSyscall(int syscall, int a0, int a1, int a2, int a3) {
+        System.out.println("Syscall: " + syscall);
 	switch (syscall) {
 	case syscallHalt:
 	    return handleHalt();
@@ -496,6 +526,8 @@ public class UserProcess {
     public void handleException(int cause) {
 	Processor processor = Machine.processor();
 
+    System.out.println("Cause: " + cause);
+
 	switch (cause) {
 	case Processor.exceptionSyscall:
 	    int result = handleSyscall(processor.readRegister(Processor.regV0),
@@ -504,6 +536,7 @@ public class UserProcess {
 				       processor.readRegister(Processor.regA2),
 				       processor.readRegister(Processor.regA3)
 				       );
+        System.out.println("Result: " + result);
 	    processor.writeRegister(Processor.regV0, result);
 	    processor.advancePC();
 	    break;				       
