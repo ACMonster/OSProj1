@@ -27,6 +27,8 @@ public class UserProcess {
 	pageTable = new TranslationEntry[numPhysPages];
 	for (int i=0; i<numPhysPages; i++)
 	    pageTable[i] = new TranslationEntry(i,i, true,false,false,false);
+    openFiles[0] = UserKernel.console.openForReading();
+    openFiles[1] = UserKernel.console.openForWriting();
     }
     
     /**
@@ -340,12 +342,83 @@ public class UserProcess {
      */
     private int handleHalt() {
 
+    if (this != UserKernel.currentProcess()) {
+        System.out.println("Halt declined.");
+        return -1;
+    }
+
+
 	Machine.halt();
 	
 	Lib.assertNotReached("Machine.halt() did not halt machine!");
 	return 0;
     }
 
+    private int handleOpen(int name, boolean creat) {
+        String s = readVirtualMemoryString(name, maxFileNameLength);
+
+        if (s != null) {
+            OpenFile f = ThreadedKernel.fileSystem.open(s, creat);
+            if (f != null) {
+                int p = 0;
+                while (p < maxFileNum && openFiles[p] != null)
+                    p++;
+                if (p == maxFileNum)
+                    return -1;
+                openFiles[p] = f;
+                return p;
+            }
+        }
+
+        return -1;
+    }
+
+    private int handleRead(int fd, int buffer, int size) {
+        if (openFiles[fd] == null)
+            return -1;
+
+        byte buf[] = new byte[size];
+
+        int cnt = openFiles[fd].read(buf, 0, size);
+
+        if (cnt == -1)
+            return -1;
+
+        writeVirtualMemory(buffer, buf, 0, cnt);
+
+        return cnt;
+    }
+
+    private int handleWrite(int fd, int buffer, int size) {
+        if (openFiles[fd] == null)
+            return -1;
+
+        byte buf[] = new byte[size];
+
+        readVirtualMemory(buffer, buf, 0, size);
+
+        return openFiles[fd].write(buf, 0, size);
+    }
+
+    private int handleClose(int fd) {
+
+        if (openFiles[fd] == null)
+            return -1;
+
+        openFiles[fd].close();
+
+        return 0;
+    }
+
+    private int handleUnlink(int name) {
+        String s = readVirtualMemoryString(name, maxFileNameLength);
+
+        if (s != null)
+            if (ThreadedKernel.fileSystem.remove(s))
+                return 0;
+
+        return -1;
+    }
 
     private static final int
         syscallHalt = 0,
@@ -391,6 +464,18 @@ public class UserProcess {
 	switch (syscall) {
 	case syscallHalt:
 	    return handleHalt();
+    case syscallCreate:
+        return handleOpen(a0, true);
+    case syscallOpen:
+        return handleOpen(a0, false);
+    case syscallRead:
+        return handleRead(a0, a1, a2);
+    case syscallWrite:
+        return handleWrite(a0, a1, a2);
+    case syscallClose:
+        return handleClose(a0);
+    case syscallUnlink:
+        return handleUnlink(a0);
 
 
 	default:
@@ -446,4 +531,10 @@ public class UserProcess {
 	
     private static final int pageSize = Processor.pageSize;
     private static final char dbgProcess = 'a';
+
+    private static final int maxFileNameLength = 256;
+
+    private static final int maxFileNum = 32;
+
+    private OpenFile openFiles[] = new OpenFile[maxFileNum];
 }
