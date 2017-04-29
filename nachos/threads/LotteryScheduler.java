@@ -6,8 +6,10 @@ import nachos.machine.*;
 
 import java.util.TreeSet;
 
-import PriorityScheduler.PriorityQueue;
-import PriorityScheduler.ThreadState;
+//import PriorityScheduler.ThreadState;
+//import PriorityScheduler.PriorityQueue;
+//import PriorityScheduler.ThreadState;
+import nachos.threads.*;
 
 import java.util.HashSet;
 import java.util.Iterator;
@@ -48,7 +50,7 @@ public class LotteryScheduler extends PriorityScheduler {
      * @return	a new lottery thread queue.
      */
     public ThreadQueue newThreadQueue(boolean transferPriority) {
-    	return new PriorityQueue(transferPriority);
+    	return new LotteryQueue(transferPriority);
     }
     
     
@@ -119,11 +121,16 @@ public class LotteryScheduler extends PriorityScheduler {
 	 */
 	public static final int priorityMaximum = Integer.MAX_VALUE;
 	
+	protected ThreadState getThreadState(KThread thread) {
+		if (thread.schedulingState == null)
+			thread.schedulingState = new ThreadState(thread);
+
+		return (ThreadState) thread.schedulingState;
+	}
 	
-	
-	protected class PriorityQueue extends PrioritySchedular.PriorityQueue implements
-	Comparable<PriorityQueue> {
-		PriorityQueue(boolean transferPriority) {
+	protected class LotteryQueue extends PriorityScheduler.PriorityQueue {
+		LotteryQueue(boolean transferPriority) {
+			super(transferPriority);
 			this.transferPriority = transferPriority;
 		}
 		public void waitForAccess(KThread thread) {
@@ -171,7 +178,7 @@ public class LotteryScheduler extends PriorityScheduler {
 		//modified: pickNextThread()
 		protected ThreadState pickNextThread() {
 			if (! waitingQueue.isEmpty()){
-				ThreadState threadState;
+				ThreadState threadState=null;
 				int totalPriority=0;
 				Iterator<ThreadState> iterator = waitingQueue.iterator();
 				while(iterator.hasNext()){
@@ -212,19 +219,7 @@ public class LotteryScheduler extends PriorityScheduler {
 			return donatingPriority;
 		}
 
-		public int compareTo(PriorityQueue queue) {
-			if (donatingPriority > queue.donatingPriority)
-				return -1;
-			if (donatingPriority < queue.donatingPriority)
-				return 1;
 
-			if (id < queue.id)
-				return -1;
-			if (id > queue.id)
-				return 1;
-
-			return 0;
-		}
 
 		public void prepareToUpdateEffectivePriority(KThread thread) {
 			boolean success = waitingQueue.remove(getThreadState(thread));
@@ -293,8 +288,9 @@ public class LotteryScheduler extends PriorityScheduler {
 	
 	protected static int numPriorityQueueCreated = 0;
 	
-	protected class ThreadState extends PriorityScheduler.ThreadState implements Comparable<ThreadState>{
+	protected class ThreadState extends PriorityScheduler.ThreadState {
 		public ThreadState(KThread thread) {
+			super(thread);
 			this.thread = thread;
 		}
 
@@ -356,7 +352,7 @@ public class LotteryScheduler extends PriorityScheduler {
 		 * 
 		 * @see nachos.threads.ThreadQueue#waitForAccess
 		 */
-		public void waitForAccess(PriorityQueue waitQueue, long enqueueTime) {
+		public void waitForAccess(LotteryQueue waitQueue, long enqueueTime) {
 			this.enqueueTime = enqueueTime;
 
 			waitingFor = waitQueue;
@@ -374,7 +370,7 @@ public class LotteryScheduler extends PriorityScheduler {
 		 * @see nachos.threads.ThreadQueue#acquire
 		 * @see nachos.threads.ThreadQueue#nextThread
 		 */
-		public void acquire(PriorityQueue waitQueue) {
+		public void acquire(LotteryQueue waitQueue) {
 			acquires.add(waitQueue);
 
 			updateEffectivePriority();
@@ -387,7 +383,7 @@ public class LotteryScheduler extends PriorityScheduler {
 		 * @param waitQueue
 		 *            the queue
 		 */
-		public void release(PriorityQueue waitQueue) {
+		public void release(LotteryQueue waitQueue) {
 			acquires.remove(waitQueue);
 
 			updateEffectivePriority();
@@ -399,20 +395,7 @@ public class LotteryScheduler extends PriorityScheduler {
 			waitingFor = null;
 		}
 
-		public int compareTo(ThreadState state) {
-
-			if (effectivePriority > state.effectivePriority)
-				return -1;
-			if (effectivePriority < state.effectivePriority)
-				return 1;
-
-			if (enqueueTime < state.enqueueTime)
-				return -1;
-			if (enqueueTime > state.enqueueTime)
-				return 1;
-
-			return thread.compareTo(state.thread);
-		}
+		
 
 		/**
 		 * Remove <tt>waitQueue</tt> from <tt>acquires</tt> to prepare to update
@@ -420,13 +403,13 @@ public class LotteryScheduler extends PriorityScheduler {
 		 * 
 		 * @param waitQueue
 		 */
-		public void prepareToUpdateDonatingPriority(PriorityQueue waitQueue) {
+		public void prepareToUpdateDonatingPriority(LotteryQueue waitQueue) {
 			boolean success = acquires.remove(waitQueue);
 
 			Lib.assertTrue(success);
 		}
 
-		public void updateDonatingPriority(PriorityQueue waitQueue) {
+		public void updateDonatingPriority(LotteryQueue waitQueue) {
 			acquires.add(waitQueue);
 
 			updateEffectivePriority();
@@ -436,7 +419,7 @@ public class LotteryScheduler extends PriorityScheduler {
 			//modified
 			int newEffectivePriority = priority;
 			if (!acquires.isEmpty()){
-				Iterator<PriorityQueue> iterator=acquires.iterator();
+				Iterator<LotteryQueue> iterator=acquires.iterator();
 				while(iterator.hasNext()){
 					newEffectivePriority += iterator.next().getDonatingPriority();
 				}
@@ -462,9 +445,9 @@ public class LotteryScheduler extends PriorityScheduler {
 		/** The effective priority of the associated thread. */
 		protected int effectivePriority = priorityDefault;
 		/** The ThreadQueue that the associated thread waiting for. */
-		protected PriorityQueue waitingFor = null;
+		protected LotteryQueue waitingFor = null;
 		/** The TreeMap storing the number of donated priorities. */
-		protected TreeSet<PriorityQueue> acquires = new TreeSet<PriorityQueue>();
+		protected TreeSet<LotteryQueue> acquires = new TreeSet<LotteryQueue>();
 		/**
 		 * The time when the thread begin to wait. That time is measured by
 		 * counting how many times <tt>PriorityQueue.waitForAccess</tt> called
