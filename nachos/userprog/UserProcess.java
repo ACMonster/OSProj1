@@ -25,6 +25,7 @@ public class UserProcess {
      */
     public UserProcess() {
         pid = pidCounter++;
+        activeProcess++;
 
         processList.add(new ProcessInfo(-1, false, false));
 
@@ -37,6 +38,7 @@ public class UserProcess {
     
     public UserProcess(int parentID) {
         pid = pidCounter++;
+        activeProcess++;
 
         processList.add(new ProcessInfo(parentID, false, false));
 
@@ -425,7 +427,6 @@ public class UserProcess {
     private int handleHalt() {
 
     if (this != UserKernel.currentProcess()) {
-        System.out.println("Halt declined.");
         return -1;
     }
 
@@ -439,7 +440,9 @@ public class UserProcess {
     private int handleOpen(int name, boolean creat) {
         String s = readVirtualMemoryString(name, maxFileNameLength);
 
-        if (s != null) {
+        if (s == null)
+            handleExit(-1, false);
+        else {
             OpenFile f = ThreadedKernel.fileSystem.open(s, creat);
             if (f != null) {
                 int p = 0;
@@ -466,7 +469,12 @@ public class UserProcess {
         if (cnt == -1)
             return -1;
 
-        return writeVirtualMemory(buffer, buf, 0, cnt);
+        if (writeVirtualMemory(buffer, buf, 0, cnt) < cnt) {
+            handleExit(-1, false);
+            return -1;
+        }
+
+        return cnt;
     }
 
     private int handleWrite(int fd, int buffer, int size) {
@@ -475,7 +483,10 @@ public class UserProcess {
 
         byte buf[] = new byte[size];
 
-        readVirtualMemory(buffer, buf, 0, size);
+        if (readVirtualMemory(buffer, buf, 0, size) < size) {
+            handleExit(-1, false);
+            return -1;
+        }
 
         return openFiles[fd].write(buf, 0, size);
     }
@@ -493,9 +504,10 @@ public class UserProcess {
     private int handleUnlink(int name) {
         String s = readVirtualMemoryString(name, maxFileNameLength);
 
-        if (s != null)
-            if (ThreadedKernel.fileSystem.remove(s))
-                return 0;
+        if (s == null)
+            handleExit(-1, false);
+        else if (ThreadedKernel.fileSystem.remove(s))
+            return 0;
 
         return -1;
     }
@@ -503,8 +515,10 @@ public class UserProcess {
     private int handleExec(int file, int argc, int argv) {
         String name = readVirtualMemoryString(file, maxFileNameLength);
 
-        if (name == null)
+        if (name == null) {
+            handleExit(-1, false);
             return -1;
+        }
 
 
         String args[] = new String[argc];
@@ -512,9 +526,16 @@ public class UserProcess {
         int cur = argv;
         for (int i = 0; i < argc; i++) {
             byte buf[] = new byte[4];
-            readVirtualMemory(cur, buf, 0, 4);
+            if (readVirtualMemory(cur, buf, 0, 4) < 4) {
+                handleExit(-1, false);
+                return -1;
+            }
             int value = Lib.bytesToInt(buf, 0);
             args[i] = readVirtualMemoryString(value, maxFileNameLength);
+            if (args[i] == null) {
+                handleExit(-1, false);
+                return -1;
+            }
             cur += 4;
         }
 
@@ -541,13 +562,16 @@ public class UserProcess {
             UserKernel.freePages.add(entry.ppn);
         }
 
-        System.out.println("Exit: " + pid + " " + status);
-
         processList.get(pid).status = status;
         processList.get(pid).normal = normal;
         processList.get(pid).lock.V();
 
-        KThread.currentThread().finish();
+        activeProcess--;
+
+        if (activeProcess == 0)
+            Kernel.kernel.terminate();
+        else
+            KThread.currentThread().finish();
 
         return 0;
     }
@@ -560,12 +584,11 @@ public class UserProcess {
 
         processList.get(processID).lock.P();
 
-        System.out.println("Join: " + processID + " " + processList.get(processID).status);
-
         byte buf[] = Lib.bytesFromInt(processList.get(processID).status);
 
         if (writeVirtualMemory(status, buf, 0, 4) < 4) {
-            //kill
+            handleExit(-1, false);
+            return -1;
         }
 
         if (processList.get(processID).normal)
@@ -701,6 +724,7 @@ public class UserProcess {
     private int pid;
     private static int pidCounter = 0;
     private static ArrayList<ProcessInfo> processList = new ArrayList<>();
+    private static int activeProcess = 0;
 
     class ProcessInfo {
         int parentID;

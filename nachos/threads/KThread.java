@@ -213,6 +213,7 @@ public class KThread {
 		while ((nextThread = currentThread.joinedThreadQueue.nextThread()) != null)
 			nextThread.ready();
 
+
 		sleep();
 	}
 
