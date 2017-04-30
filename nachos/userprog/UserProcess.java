@@ -582,6 +582,8 @@ public class UserProcess {
         if (processList.get(processID).parentID != pid)
             return -1;
 
+        processList.get(processID).parentID = -1;
+        
         processList.get(processID).lock.P();
 
         byte buf[] = Lib.bytesFromInt(processList.get(processID).status);
